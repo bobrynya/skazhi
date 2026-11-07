@@ -27,7 +27,16 @@ print("model loaded", flush=True)
 
 
 def recognize(pcm: bytes, grammar: str | None = None) -> str:
-    """grammar is a JSON array of phrases as a string; None means free-form."""
+    """Transcribe a whole utterance with a fresh recognizer.
+
+    Args:
+        pcm: Raw 16 kHz mono PCM16 audio.
+        grammar: JSON array of allowed phrases as a string (``'["ютуб", "[unk]"]'``),
+            or None for free-form recognition.
+
+    Returns:
+        The recognized text, lowercase; empty if nothing was heard.
+    """
     rec = KaldiRecognizer(model, RATE, grammar) if grammar else KaldiRecognizer(model, RATE)
     rec.AcceptWaveform(pcm)
     text: str = json.loads(rec.FinalResult()).get("text", "")
@@ -35,9 +44,12 @@ def recognize(pcm: bytes, grammar: str | None = None) -> str:
 
 
 class Handler(BaseHTTPRequestHandler):
+    """HTTP API: ``GET /health`` and ``POST /recognize``. One thread per request."""
+
     timeout = 30  # a client that under-sends its Content-Length must not pin a thread forever
 
     def _json(self, code: int, obj: dict[str, Any]) -> None:
+        """Send ``obj`` as a UTF-8 JSON response with status ``code``."""
         body = json.dumps(obj, ensure_ascii=False).encode()
         self.send_response(code)
         self.send_header("Content-Type", "application/json; charset=utf-8")
@@ -46,12 +58,22 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_GET(self) -> None:
+        """Liveness probe: ``/health`` returns ``{"ok": true}``."""
         if self.path == "/health":
             self._json(200, {"ok": True})
         else:
             self._json(404, {"error": "not found"})
 
     def do_POST(self) -> None:
+        """Recognize the PCM body.
+
+        Body: raw 16 kHz mono PCM16, at most ``MAX_BYTES``. Optional header
+        ``X-Grammar-B64``: base64 of a UTF-8 JSON array of phrases.
+
+        Responds 200 ``{"text": <grammar-restricted>, "free": <unrestricted>}``
+        (both equal when no grammar is sent), 400 on a malformed request,
+        500 if recognition fails.
+        """
         if self.path != "/recognize":
             self._json(404, {"error": "not found"})
             return
@@ -74,7 +96,7 @@ class Handler(BaseHTTPRequestHandler):
             self._json(500, {"error": str(e)})
 
     def log_message(self, format: str, *args: Any) -> None:
-        pass  # quiet
+        """Silence the per-request access log; do_POST logs what was heard instead."""
 
 
 if __name__ == "__main__":
