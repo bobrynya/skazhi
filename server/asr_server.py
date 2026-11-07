@@ -10,8 +10,9 @@ import base64
 import json
 import os
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from typing import Any
 
-from vosk import Model, KaldiRecognizer, SetLogLevel
+from vosk import KaldiRecognizer, Model, SetLogLevel
 
 SetLogLevel(-1)
 MODEL_PATH = os.environ.get("SKAZHI_MODEL", os.path.join(os.path.dirname(__file__), "model"))
@@ -25,17 +26,18 @@ model = Model(MODEL_PATH)
 print("model loaded", flush=True)
 
 
-def recognize(pcm, grammar=None):
-    # grammar is a JSON array string
+def recognize(pcm: bytes, grammar: str | None = None) -> str:
+    """grammar is a JSON array of phrases as a string; None means free-form."""
     rec = KaldiRecognizer(model, RATE, grammar) if grammar else KaldiRecognizer(model, RATE)
     rec.AcceptWaveform(pcm)
-    return json.loads(rec.FinalResult()).get("text", "")
+    text: str = json.loads(rec.FinalResult()).get("text", "")
+    return text
 
 
 class Handler(BaseHTTPRequestHandler):
     timeout = 30  # a client that under-sends its Content-Length must not pin a thread forever
 
-    def _json(self, code, obj):
+    def _json(self, code: int, obj: dict[str, Any]) -> None:
         body = json.dumps(obj, ensure_ascii=False).encode()
         self.send_response(code)
         self.send_header("Content-Type", "application/json; charset=utf-8")
@@ -43,13 +45,13 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
-    def do_GET(self):
+    def do_GET(self) -> None:
         if self.path == "/health":
             self._json(200, {"ok": True})
         else:
             self._json(404, {"error": "not found"})
 
-    def do_POST(self):
+    def do_POST(self) -> None:
         if self.path != "/recognize":
             self._json(404, {"error": "not found"})
             return
@@ -60,7 +62,7 @@ class Handler(BaseHTTPRequestHandler):
             pcm = self.rfile.read(n) if n else b""
             g64 = self.headers.get("X-Grammar-B64")
             grammar = base64.b64decode(g64).decode("utf-8") if g64 else None
-        except Exception as e:
+        except ValueError as e:  # bad int, base64 (binascii.Error) and UTF-8 are all ValueError
             self._json(400, {"error": str(e)})
             return
         try:
@@ -68,10 +70,10 @@ class Handler(BaseHTTPRequestHandler):
             text = recognize(pcm, grammar) if grammar else free
             print(f"{len(pcm) / (RATE * 2):.1f}s text={text!r} free={free!r}", flush=True)
             self._json(200, {"text": text, "free": free})
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - HTTP boundary: any Vosk failure becomes a 500, not a dropped socket
             self._json(500, {"error": str(e)})
 
-    def log_message(self, *a):
+    def log_message(self, format: str, *args: Any) -> None:
         pass  # quiet
 
 

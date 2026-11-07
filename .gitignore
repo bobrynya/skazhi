@@ -10,3 +10,4 @@ server/venv/
 *.pcm
 *.wav
 app/*.idsig
+.DS_Store
