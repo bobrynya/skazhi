@@ -9,11 +9,11 @@ import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 
-// Sends PCM to the skazhi server and returns the recognized text.
+// Sends PCM to the skazhi server; returns {grammar text, free text}.
 public class Asr {
     static final String TAG = "skazhi";
 
-    public static String recognize(String url, byte[] pcm, String grammar) {
+    public static String[] recognize(String url, byte[] pcm, String grammar) {
         HttpURLConnection c = null;
         try {
             c = (HttpURLConnection) new URL(url).openConnection();
@@ -31,11 +31,12 @@ public class Asr {
             byte[] b = new byte[4096]; int n;
             while (in != null && (n = in.read(b)) > 0) bo.write(b, 0, n);
             String body = bo.toString("UTF-8");
-            if (code >= 400) { Log.e(TAG, "server " + code + ": " + body); return ""; }
-            return new JSONObject(body).optString("text", "");
+            if (code >= 400) { Log.e(TAG, "server " + code + ": " + body); return new String[]{"", ""}; }
+            JSONObject o = new JSONObject(body);
+            return new String[]{o.optString("text", ""), o.optString("free", "")};
         } catch (Throwable t) {
             Log.e(TAG, "recognize", t);
-            return "";
+            return new String[]{"", ""};
         } finally {
             if (c != null) c.disconnect();
         }

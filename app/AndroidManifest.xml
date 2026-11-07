@@ -6,6 +6,8 @@
   <queries>
     <package android:name="com.google.android.youtube.tv"/>
     <package android:name="top.rootu.lampa"/>
+    <package android:name="com.spotify.tv.android"/>
+    <package android:name="com.android.tv.settings"/>
     <intent><action android:name="android.intent.action.MAIN"/></intent>
   </queries>
   <application android:label="@string/app_name" android:usesCleartextTraffic="true">

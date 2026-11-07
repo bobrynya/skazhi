@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""skazhi ASR server: POST raw 16kHz mono PCM16 -> {"text": "..."} via Vosk.
+"""skazhi ASR server: POST raw 16kHz mono PCM16 -> {"text": "...", "free": "..."} via Vosk.
 
-The client sends an optional grammar (JSON array of phrases) in the X-Grammar
-header; recognition is then restricted to those phrases, which makes short
-voice commands near-perfect even on a noisy/quiet mic. No grammar => free form.
+The client sends an optional grammar (JSON array of phrases, base64 in
+X-Grammar-B64); "text" is then restricted to those phrases, which makes short
+voice commands near-perfect even on a quiet mic. "free" is always the
+unrestricted transcript (needed for "find <movie title>").
 """
 import base64
 import json
@@ -21,6 +22,14 @@ RATE = 16000
 print(f"loading model from {MODEL_PATH} ...", flush=True)
 model = Model(MODEL_PATH)
 print("model loaded", flush=True)
+
+
+def recognize(pcm, grammar=None):
+    # grammar is a JSON array string
+    rec = KaldiRecognizer(model, RATE, grammar) if grammar else KaldiRecognizer(model, RATE)
+    rec.SetWords(False)
+    rec.AcceptWaveform(pcm)
+    return json.loads(rec.FinalResult()).get("text", "")
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -47,14 +56,9 @@ class Handler(BaseHTTPRequestHandler):
         g64 = self.headers.get("X-Grammar-B64")
         grammar = base64.b64decode(g64).decode("utf-8") if g64 else None
         try:
-            if grammar:
-                rec = KaldiRecognizer(model, RATE, grammar)  # grammar is a JSON array string
-            else:
-                rec = KaldiRecognizer(model, RATE)
-            rec.SetWords(False)
-            rec.AcceptWaveform(pcm)
-            text = json.loads(rec.FinalResult()).get("text", "")
-            self._json(200, {"text": text})
+            free = recognize(pcm)
+            text = recognize(pcm, grammar) if grammar else free
+            self._json(200, {"text": text, "free": free})
         except Exception as e:
             self._json(500, {"error": str(e)})
 

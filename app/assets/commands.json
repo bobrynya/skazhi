@@ -1,8 +1,25 @@
 {
   "server": "http://192.168.88.241:2700/recognize",
   "trigger_scan_code": 63,
+  "launch_verbs": ["запусти", "открой", "включи"],
+  "search": { "prefixes": ["найди", "найти", "поищи"], "package": "top.rootu.lampa" },
   "commands": [
-    { "phrases": ["запусти ютуб", "открой ютуб", "ютуб", "youtube"], "package": "com.google.android.youtube.tv" },
-    { "phrases": ["запусти лампу", "открой лампу", "запусти лампа", "лампа"], "package": "top.rootu.lampa" }
+    { "phrases": ["ютуб"], "launch": "com.google.android.youtube.tv" },
+    { "phrases": ["лампу", "лампа"], "launch": "top.rootu.lampa" },
+    { "phrases": ["спот и фай", "спот фай", "музыку"], "launch": "com.spotify.tv.android" },
+    { "phrases": ["настройки"], "launch": "com.android.tv.settings" },
+
+    { "phrases": ["сделай громче", "громче", "погромче"], "volume": "up" },
+    { "phrases": ["сделай тише", "тише", "потише"], "volume": "down" },
+    { "phrases": ["выключи звук", "включи звук", "без звука"], "volume": "mute" },
+
+    { "phrases": ["пауза", "паузу", "поставь на паузу", "стоп"], "key": "KEYCODE_MEDIA_PAUSE" },
+    { "phrases": ["продолжи", "продолжай", "играй"], "key": "KEYCODE_MEDIA_PLAY" },
+    { "phrases": ["дальше", "следующий", "следующая", "вперёд"], "key": "KEYCODE_MEDIA_NEXT" },
+    { "phrases": ["предыдущий", "предыдущая"], "key": "KEYCODE_MEDIA_PREVIOUS" },
+
+    { "phrases": ["домой", "на главную"], "global": "home" },
+    { "phrases": ["назад"], "global": "back" },
+    { "phrases": ["выключи телевизор"], "global": "lock" }
   ]
 }
