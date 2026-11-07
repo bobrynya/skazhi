@@ -1,11 +1,13 @@
 #!/bin/bash
-# Install skazhi on the TV and enable it. Usage: ./deploy.sh [adb-serial]
+# Install skazhi on the TV and enable it: grant the mic, turn on the accessibility service.
+# Usage: ./deploy.sh <tv-ip>:5555 [path/to/skazhi.apk]   (default: the one build.sh made)
 set -euo pipefail
-cd "$(dirname "$0")"
-DEV="${1:-192.168.88.57:5555}"
+[ $# -ge 1 ] || { echo "usage: $0 <tv-ip>:5555 [skazhi.apk]" >&2; exit 2; }
+DEV="$1"
+APK="$(cd "$(dirname "${2:-$(dirname "$0")/skazhi.apk}")" && pwd)/$(basename "${2:-skazhi.apk}")"
 SVC="ru.home.skazhi/ru.home.skazhi.KeyService"
 adb connect "$DEV" >/dev/null 2>&1 || true
-adb -s "$DEV" install -r skazhi.apk
+adb -s "$DEV" install -r "$APK"
 adb -s "$DEV" shell pm grant ru.home.skazhi android.permission.RECORD_AUDIO || true
 # append our accessibility service without dropping others already enabled
 cur=$(adb -s "$DEV" shell settings get secure enabled_accessibility_services | tr -d '\r')

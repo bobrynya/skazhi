@@ -1,5 +1,4 @@
 {
-  "server": "http://192.168.88.241:2700/recognize",
   "trigger_scan_code": 63,
   "launch_verbs": ["запусти", "открой", "включи"],
   "search": { "prefixes": ["найди", "найти", "поищи"], "package": "top.rootu.lampa" },

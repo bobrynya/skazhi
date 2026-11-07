@@ -8,7 +8,7 @@ BT="$SDK/build-tools/34.0.0"; JAR="$SDK/platforms/android-34/android.jar"
 rm -rf build && mkdir -p build/classes build/dex
 "$BT/aapt2" compile --dir res -o build/res.zip >/dev/null
 "$BT/aapt2" link -I "$JAR" --manifest AndroidManifest.xml -o build/base.apk build/res.zip \
-    -A assets --min-sdk-version 28 --target-sdk-version 34
+    --min-sdk-version 28 --target-sdk-version 34
 javac --release 11 -cp "$JAR" -d build/classes $(find src -name '*.java')
 "$BT/d8" --min-api 28 --lib "$JAR" --output build/dex $(find build/classes -name '*.class')
 cp build/base.apk build/unsigned.apk

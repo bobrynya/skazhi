@@ -33,30 +33,31 @@ No Google, no cloud, no API keys, no root. Audio never leaves your LAN.
 | «**найди** реквием по мечте» | opens Lampa search with the title |
 | «**выключи телевизор**» | puts the TV to sleep |
 
-All phrases live in [`app/assets/commands.json`](app/assets/commands.json).
+All phrases live in [`server/commands.json`](server/commands.json) on the server: edit, save, done.
 
 ## How it works
 
 ```
- hold mic button        record while held            Vosk on the Pi
- ┌──────────┐  BLE   ┌───────────────────┐  HTTP   ┌──────────────────┐
- │  remote  │ ─────▶ │ TV: skazhi        │ ──────▶ │ skazhi-asr       │
- └──────────┘        │ (accessibility    │  PCM    │ grammar + free   │
-                     │  service)         │ ◀────── │ transcripts      │
-                     └───────────────────┘  JSON   └──────────────────┘
-                       │ match commands.json
+ hold mic button        record while held             server (e.g. a Pi)
+ ┌──────────┐  BLE   ┌───────────────────┐  PCM     ┌──────────────────────┐
+ │  remote  │ ─────▶ │ TV: skazhi        │ ───────▶ │ Vosk: grammar + free │
+ └──────────┘        │ (accessibility    │          │ transcripts, matched │
+                     │  service)         │ ◀─────── │ to commands.json     │
+                     └───────────────────┘  action  └──────────────────────┘
+                       │                    ◀── found over mDNS (_skazhi._tcp)
                        ▼
             launch app · volume · media key · home/back · Lampa search
 ```
 
-- **[app/](app)** — a tiny Android accessibility service (no UI, ~300 lines of
-  Java, built without Gradle). It catches the remote's voice button, records the
-  remote mic while the button is held, sends the audio to the Pi and runs the
-  matched action.
-- **[server/](server)** — an ~80-line Python HTTP server wrapping
-  [Vosk](https://alphacephei.com/vosk/). `POST /recognize` with raw 16 kHz mono
-  PCM16 returns two transcripts: one restricted to the command phrases (near
-  perfect on short commands) and one free-form (for «найди ‹title›»).
+- **[app/](app)** — a tiny Android accessibility service (no UI, ~350 lines of
+  Java, built without Gradle). It finds the server on the LAN by itself, records
+  the remote mic while the voice button is held, sends the audio and runs the
+  action the server answers with. Nothing to configure on the TV.
+- **[server/](server)** — a small Python HTTP server around
+  [Vosk](https://alphacephei.com/vosk/). It transcribes twice — restricted to the
+  command phrases (near perfect on short commands) and free-form (for «найди
+  ‹title›») — matches the result against `commands.json` and announces itself
+  over mDNS.
 
 ### The non-obvious bits
 
@@ -70,16 +71,16 @@ All phrases live in [`app/assets/commands.json`](app/assets/commands.json).
   fails silently.
 - Recognition runs **on the Pi**, not the TV: on-device Vosk broke this TV's
   video pipeline.
-- The grammar travels in a **base64** header: raw Cyrillic in HTTP headers turns
-  into mojibake.
+- Speech is transcribed **twice**: with a grammar of the command phrases (short
+  commands come out near perfect) and free-form, because a movie title for
+  «найди …» can't be in any grammar.
 - Lampa's `SEARCH` intent filter has no `CATEGORY_DEFAULT`, so the search intent
   is resolved and started explicitly with a `query` extra.
 
 ## Setup
 
-You need: the TV with ADB over network enabled, a Raspberry Pi (or any Linux box)
-on the same LAN, and on your computer Android cmdline-tools (build-tools 34,
-platform 34) plus a JDK.
+You need: the TV with network debugging (ADB) enabled, a Raspberry Pi or any
+Linux box on the same LAN, and `adb` on your computer.
 
 ### 1. Server (Raspberry Pi)
 
@@ -90,7 +91,8 @@ sudo ./install.sh                         # downloads vosk-model-small-ru-0.22
 ```
 
 Installs to `/opt/skazhi` and runs as the `skazhi-asr` systemd service on port
-2700 (opened to `192.168.0.0/16` if nftables is used). Re-run it to update.
+2700, announced on the LAN over mDNS. With nftables, tcp/2700 and udp/5353 are
+opened to `192.168.0.0/16`. Re-run it to update; your `commands.json` is kept.
 
 ```bash
 curl http://<pi-ip>:2700/health           # {"ok": true}
@@ -99,14 +101,21 @@ journalctl -u skazhi-asr -f               # what it heard, live
 
 ### 2. App (TV)
 
+Download `skazhi.apk` from [Releases](https://github.com/bobrynya/skazhi/releases/latest), then:
+
 ```bash
-cd app
-# set "server" in assets/commands.json to http://<pi-ip>:2700/recognize
-./build.sh                                # -> skazhi.apk
-./deploy.sh <tv-ip>:5555                  # install, grant mic, enable the service
+app/deploy.sh <tv-ip>:5555 ~/Downloads/skazhi.apk   # install, grant mic, enable the service
 ```
 
+The app finds the server by itself; hold the voice button and talk. To build
+the APK yourself: Android cmdline-tools (build-tools 34, platform 34) and a JDK,
+then `app/build.sh`.
+
 ## Adding commands
+
+Edit `/opt/skazhi/commands.json` on the server and save: it is picked up on the
+next command, no restart or rebuild. A broken edit is logged and the previous
+version stays in use.
 
 ```json
 { "phrases": ["кинопоиск"], "launch": "ru.kinopoisk.tv" }
