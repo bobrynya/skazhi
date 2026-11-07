@@ -13,8 +13,13 @@ for ``search.package`` with the rest of the phrase as the query.
 """
 
 import json
+import logging
 import re
+import threading
+from pathlib import Path
 from typing import Any, NamedTuple
+
+log = logging.getLogger("skazhi")
 
 ACTIONS = ("launch", "volume", "key", "global")
 # Allowed arguments per action; None means any non-empty string.
@@ -120,3 +125,37 @@ class Commands:
             if f" {phrase} " in padded:
                 return hit
         return None
+
+
+class CommandsFile:
+    """commands.json, reloaded when its mtime changes.
+
+    A broken edit is logged and the last good config stays in use, so a typo
+    never takes voice control down.
+    """
+
+    def __init__(self, path: Path) -> None:
+        """Load the file.
+
+        Raises:
+            ValueError: The file is invalid: fail loudly at startup.
+        """
+        self._path = path
+        self._lock = threading.Lock()
+        self._mtime = path.stat().st_mtime
+        self._commands = Commands(path.read_text(encoding="utf-8"))
+
+    def get(self) -> Commands:
+        """Return the current config, reloading it if the file changed."""
+        with self._lock:
+            try:
+                mtime = self._path.stat().st_mtime
+                if mtime != self._mtime:
+                    self._commands = Commands(self._path.read_text(encoding="utf-8"))
+                    # Only after a successful parse: a half-saved file read in the same
+                    # mtime tick as the finished one must not block the reload.
+                    self._mtime = mtime
+                    log.info("reloaded %s", self._path)
+            except (OSError, ValueError) as e:
+                log.warning("keeping previous commands, %s is broken: %s", self._path, e)
+            return self._commands

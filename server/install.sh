@@ -35,7 +35,7 @@ chown -R "$SVC_USER":"$SVC_USER" "$DEST"
 if command -v nft >/dev/null && nft list chain inet filter input >/dev/null 2>&1; then
   for rule in "tcp dport 2700" "udp dport 5353"; do
     nft list chain inet filter input | grep -q "$rule" || \
-      nft add rule inet filter input ip saddr 192.168.0.0/16 $rule accept || true
+      nft insert rule inet filter input ip saddr 192.168.0.0/16 $rule accept || true  # before any trailing drop
     if [ -f /etc/nftables.conf ] && ! grep -q "$rule" /etc/nftables.conf; then
       sed -i.bak "/type filter hook input/a\    ip saddr 192.168.0.0/16 $rule accept" /etc/nftables.conf || true
     fi

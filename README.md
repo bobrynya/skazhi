@@ -99,6 +99,15 @@ curl http://<pi-ip>:2700/health           # {"ok": true}
 journalctl -u skazhi-asr -f               # what it heard, live
 ```
 
+Optional settings go to `/etc/default/skazhi` (then `sudo systemctl restart skazhi-asr`):
+
+| Variable | Default | |
+|---|---|---|
+| `SKAZHI_ADVERTISE_IP` | address of the default route | LAN address to announce; set it if the host's default route is a VPN |
+| `SKAZHI_PORT` | `2700` | HTTP port |
+| `SKAZHI_LOG_LEVEL` | `INFO` | `DEBUG` also shows mDNS internals |
+| `SKAZHI_MODEL`, `SKAZHI_COMMANDS` | next to the script | Vosk model directory, commands file |
+
 ### 2. App (TV)
 
 Download `skazhi.apk` from [Releases](https://github.com/bobrynya/skazhi/releases/latest), then:
@@ -107,7 +116,15 @@ Download `skazhi.apk` from [Releases](https://github.com/bobrynya/skazhi/release
 app/deploy.sh <tv-ip>:5555 ~/Downloads/skazhi.apk   # install, grant mic, enable the service
 ```
 
-The app finds the server by itself; hold the voice button and talk. To build
+The app finds the server by itself; hold the voice button and talk. If your
+network blocks mDNS (multicast filtering, Wi-Fi client isolation), set the
+address by hand:
+
+```bash
+adb shell am broadcast -n ru.home.skazhi/.SetServer --es url http://<pi-ip>:2700
+```
+
+To build
 the APK yourself: Android cmdline-tools (build-tools 34, platform 34) and a JDK,
 then `app/build.sh`.
 

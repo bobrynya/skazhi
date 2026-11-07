@@ -19,15 +19,19 @@ import java.util.List;
  * <p>Hold the button: the remote mic is recorded. Release: the audio goes to the
  * skazhi server, which transcribes it, matches it against its commands.json and
  * answers with an action that runs here. The server is found on the LAN by
- * {@link Discovery}; its address and the button's scancode are remembered, so voice
- * control works right after a reboot.
+ * {@link Discovery} (or set over adb with {@link SetServer}); its address and the
+ * button's scancode are kept in shared preferences, so voice control works right
+ * after a reboot.
  *
  * <p>The key is NOT consumed ({@link #onKeyEvent} returns {@code false}): the firmware
  * streams the remote audio only while it thinks its own assistant is listening; that
  * (disabled) XiaoAI assistant then fails harmlessly.
  */
-public class KeyService extends AccessibilityService {
+public class KeyService extends AccessibilityService
+        implements SharedPreferences.OnSharedPreferenceChangeListener {
     static final String TAG = "skazhi";
+    /** Shared preferences file: {@code server} (base URL) and {@code trigger_scan_code}. */
+    static final String PREFS = "skazhi";
     /** Scancode of the voice button on the Xiaomi remote, used until the server says otherwise. */
     static final int DEFAULT_SCAN_CODE = 63;
 
@@ -48,22 +52,42 @@ public class KeyService extends AccessibilityService {
     /** Restores the remembered server and starts looking for it on the LAN. */
     @Override protected void onServiceConnected() {
         super.onServiceConnected();
+        if (discovery != null) return;  // rebind: already set up
         main = new Handler(getMainLooper());
-        prefs = getSharedPreferences("skazhi", MODE_PRIVATE);
+        prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
         server = prefs.getString("server", null);
         triggerScan = prefs.getInt("trigger_scan_code", DEFAULT_SCAN_CODE);
         Log.i(TAG, "remembered server=" + server + " scan=" + triggerScan);
-        // off the NSD thread: onServerFound makes a blocking HTTP call
-        discovery = new Discovery(this, url -> new Thread(() -> onServerFound(url), "skazhi-config").start());
+        prefs.registerOnSharedPreferenceChangeListener(this);
+        discovery = new Discovery(this, this::onServerFound);
         discovery.start();
     }
 
-    /** Called once {@link Discovery} finds the server: remember it and fetch its config. */
+    /** {@link Discovery} found the server (on an NSD thread). */
     private void onServerFound(String url) {
-        server = url;
-        int scan = Asr.triggerScanCode(url);
-        if (scan > 0) triggerScan = scan;
-        prefs.edit().putString("server", url).putInt("trigger_scan_code", triggerScan).apply();
+        if (url.equals(server)) refreshConfig();  // same address: prefs won't fire, refresh by hand
+        else prefs.edit().putString("server", url).apply();  // -> onSharedPreferenceChanged
+    }
+
+    /** Keeps the fields in sync with prefs; a new server (found or set by hand) gets its config fetched. */
+    @Override public void onSharedPreferenceChanged(SharedPreferences p, String key) {
+        if ("server".equals(key)) {
+            server = p.getString(key, null);
+            Log.i(TAG, "server=" + server);
+            refreshConfig();
+        } else if ("trigger_scan_code".equals(key)) {
+            triggerScan = p.getInt(key, DEFAULT_SCAN_CODE);
+        }
+    }
+
+    /** Fetches the button scancode from the server, off the calling thread. */
+    private void refreshConfig() {
+        String s = server;
+        if (s == null) return;
+        new Thread(() -> {
+            int scan = Asr.triggerScanCode(s);
+            if (scan > 0) prefs.edit().putInt("trigger_scan_code", scan).apply();
+        }, "skazhi-config").start();
     }
 
     /**

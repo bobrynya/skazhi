@@ -16,7 +16,6 @@ import os
 import signal
 import socket
 import sys
-import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, NoReturn
@@ -24,7 +23,7 @@ from typing import Any, NoReturn
 from vosk import KaldiRecognizer, Model, SetLogLevel
 from zeroconf import IPVersion, ServiceInfo, Zeroconf
 
-from commands import Commands
+from commands import CommandsFile
 
 HERE = Path(__file__).resolve().parent
 MODEL_PATH = os.environ.get("SKAZHI_MODEL", str(HERE / "model"))
@@ -36,34 +35,6 @@ MAX_BYTES = RATE * 2 * 60  # 60 s of PCM16; the app sends at most 10 s
 SERVICE_TYPE = "_skazhi._tcp.local."
 
 log = logging.getLogger("skazhi")
-
-
-class CommandsFile:
-    """commands.json, reloaded when its mtime changes.
-
-    A broken edit is logged and the last good config stays in use, so a typo
-    never takes the TV's voice control down.
-    """
-
-    def __init__(self, path: Path) -> None:
-        """Load the file; fail loudly at startup if it is invalid."""
-        self._path = path
-        self._lock = threading.Lock()
-        self._mtime = path.stat().st_mtime
-        self._commands = Commands(path.read_text(encoding="utf-8"))
-
-    def get(self) -> Commands:
-        """Return the current config, reloading it if the file changed."""
-        with self._lock:
-            try:
-                mtime = self._path.stat().st_mtime
-                if mtime != self._mtime:
-                    self._mtime = mtime
-                    self._commands = Commands(self._path.read_text(encoding="utf-8"))
-                    log.info("reloaded %s", self._path)
-            except (OSError, ValueError) as e:
-                log.warning("keeping previous commands, %s is broken: %s", self._path, e)
-            return self._commands
 
 
 def recognize(pcm: bytes, grammar: str | None = None) -> str:

@@ -1,10 +1,12 @@
 """Tests for commands.py: python3 -m unittest discover -s server."""
 
 import json
+import os
+import tempfile
 import unittest
 from pathlib import Path
 
-from commands import Commands, Hit, norm
+from commands import Commands, CommandsFile, Hit, norm
 
 CONFIG = {
     "trigger_scan_code": 63,
@@ -102,6 +104,44 @@ class ShippedConfigTest(unittest.TestCase):
     def test_repo_commands_json_is_valid(self) -> None:
         c = Commands((Path(__file__).parent / "commands.json").read_text(encoding="utf-8"))
         self.assertEqual(c.match("запусти ютуб", ""), Hit("launch", "com.google.android.youtube.tv"))
+
+
+class CommandsFileTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self.dir = tempfile.TemporaryDirectory()
+        self.path = Path(self.dir.name) / "commands.json"
+        self.write({"trigger_scan_code": 1})
+        self.f = CommandsFile(self.path)
+
+    def tearDown(self) -> None:
+        self.dir.cleanup()
+
+    def write(self, cfg: object, mtime: float | None = None) -> None:
+        self.path.write_text(cfg if isinstance(cfg, str) else json.dumps(cfg), encoding="utf-8")
+        if mtime is not None:
+            os.utime(self.path, (mtime, mtime))
+
+    def test_reloads_on_change(self) -> None:
+        self.write({"trigger_scan_code": 2}, mtime=self.path.stat().st_mtime + 10)
+        self.assertEqual(self.f.get().trigger_scan_code, 2)
+
+    def test_broken_edit_keeps_previous(self) -> None:
+        self.write("{ broken", mtime=self.path.stat().st_mtime + 10)
+        self.assertEqual(self.f.get().trigger_scan_code, 1)
+
+    def test_fixed_within_same_mtime_tick_is_picked_up(self) -> None:
+        # An editor's truncate+write can land in one mtime tick: a request that saw
+        # the half-written file must not stop the finished one from loading.
+        t = self.path.stat().st_mtime + 10
+        self.write("{", mtime=t)
+        self.assertEqual(self.f.get().trigger_scan_code, 1)
+        self.write({"trigger_scan_code": 3}, mtime=t)
+        self.assertEqual(self.f.get().trigger_scan_code, 3)
+
+    def test_invalid_at_startup_raises(self) -> None:
+        self.write("{")
+        with self.assertRaises(ValueError):
+            CommandsFile(self.path)
 
 
 if __name__ == "__main__":
