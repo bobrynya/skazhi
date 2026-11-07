@@ -1,0 +1,12 @@
+# build artifacts
+app/build/
+app/*.apk
+# large model (downloaded by server/install.sh)
+server/model/
+# python
+server/venv/
+**/__pycache__/
+# local captures / scratch
+*.pcm
+*.wav
+app/*.idsig

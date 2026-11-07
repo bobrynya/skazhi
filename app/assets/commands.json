@@ -1,0 +1,8 @@
+{
+  "server": "http://192.168.88.241:2700/recognize",
+  "trigger_scan_code": 63,
+  "commands": [
+    { "phrases": ["запусти ютуб", "открой ютуб", "ютуб", "youtube"], "package": "com.google.android.youtube.tv" },
+    { "phrases": ["запусти лампу", "открой лампу", "запусти лампа", "лампа"], "package": "top.rootu.lampa" }
+  ]
+}

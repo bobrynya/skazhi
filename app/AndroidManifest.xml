@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="ru.home.skazhi">
+  <uses-sdk android:minSdkVersion="28" android:targetSdkVersion="34"/>
+  <uses-permission android:name="android.permission.RECORD_AUDIO"/>
+  <uses-permission android:name="android.permission.INTERNET"/>
+  <queries>
+    <package android:name="com.google.android.youtube.tv"/>
+    <package android:name="top.rootu.lampa"/>
+    <intent><action android:name="android.intent.action.MAIN"/></intent>
+  </queries>
+  <application android:label="@string/app_name" android:usesCleartextTraffic="true">
+    <service android:name=".KeyService" android:exported="true"
+             android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+      <intent-filter><action android:name="android.accessibilityservice.AccessibilityService"/></intent-filter>
+      <meta-data android:name="android.accessibilityservice" android:resource="@xml/accessibility_service_config"/>
+    </service>
+  </application>
+</manifest>
