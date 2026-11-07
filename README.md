@@ -1,3 +1,5 @@
+<p align="center"><img src="art/icon-256.png" width="128" alt="skazhi"></p>
+
 # skazhi
 
 Voice commands for a Google-less (China-firmware) Xiaomi Android TV, using the

@@ -41,6 +41,7 @@ public class KeyService extends AccessibilityService {
         byte[] pcm = recorder.stop();
         Log.i(TAG, "pcm=" + pcm.length + " bytes (" + (pcm.length/32000.0) + "s)");
         String[] r = Asr.recognize(cfg.server, pcm, cfg.grammar());
+        if (r == null) { toast("Сервер распознавания недоступен"); return; }
         Commands.Hit hit = cfg.match(r[0], r[1]);
         Log.i(TAG, "heard='" + r[0] + "' free='" + r[1] + "' -> " + hit);
         if (hit == null) { toast(r[1].isEmpty() ? "Не расслышал" : "Не понял: " + r[1]); return; }

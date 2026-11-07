@@ -48,7 +48,10 @@ public class Commands {
         for (int i = 0; i < cmds.length(); i++) {
             JSONObject c = cmds.getJSONObject(i);
             String action = null;
-            for (String a : ACTIONS) if (c.has(a)) action = a;
+            for (String a : ACTIONS) if (c.has(a)) {
+                if (action != null) throw new IllegalArgumentException("command with two actions: " + c);
+                action = a;
+            }
             if (action == null) throw new IllegalArgumentException("command without action: " + c);
             String arg = c.getString(action);
             JSONArray ps = c.getJSONArray("phrases");

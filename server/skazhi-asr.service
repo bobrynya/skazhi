@@ -7,7 +7,6 @@ Wants=network-online.target
 Type=simple
 User=%i
 WorkingDirectory=/opt/skazhi
-Environment=SKAZHI_MODEL=/opt/skazhi/model
 ExecStart=/opt/skazhi/venv/bin/python /opt/skazhi/asr_server.py
 Restart=on-failure
 RestartSec=3

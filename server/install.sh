@@ -12,7 +12,6 @@ SVC_USER="${SUDO_USER:-$USER}"
 mkdir -p "$DEST"
 cp "$SRC/asr_server.py" "$DEST/"
 python3 -m venv "$DEST/venv"
-"$DEST/venv/bin/pip" install -q --upgrade pip
 "$DEST/venv/bin/pip" install -q -r "$SRC/requirements.txt"
 
 if [ ! -d "$DEST/model" ]; then
@@ -30,7 +29,8 @@ chown -R "$SVC_USER":"$SVC_USER" "$DEST"
 
 sed "s/%i/$SVC_USER/" "$SRC/skazhi-asr.service" > /etc/systemd/system/skazhi-asr.service
 systemctl daemon-reload
-systemctl enable --now skazhi-asr
+systemctl enable skazhi-asr
+systemctl restart skazhi-asr  # re-run must pick up a new asr_server.py
 sleep 3
 systemctl is-active skazhi-asr && curl -s localhost:2700/health && echo " <- OK"
 
@@ -41,4 +41,6 @@ if command -v nft >/dev/null && nft list chain inet filter input >/dev/null 2>&1
   if [ -f /etc/nftables.conf ] && ! grep -q 'dport 2700' /etc/nftables.conf; then
     sed -i.bak '/type filter hook input/a\    ip saddr 192.168.0.0/16 tcp dport 2700 accept' /etc/nftables.conf || true
   fi
+else
+  echo "WARNING: no nftables 'inet filter input' chain; open tcp/2700 for the LAN yourself if a firewall is on"
 fi

@@ -9,7 +9,7 @@ import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 
-// Sends PCM to the skazhi server; returns {grammar text, free text}.
+// Sends PCM to the skazhi server; returns {grammar text, free text}, or null if the server failed.
 public class Asr {
     static final String TAG = "skazhi";
 
@@ -18,7 +18,7 @@ public class Asr {
         try {
             c = (HttpURLConnection) new URL(url).openConnection();
             c.setConnectTimeout(3000);
-            c.setReadTimeout(8000);
+            c.setReadTimeout(15000);  // two Vosk passes over up to 10 s of audio on a Pi
             c.setDoOutput(true);
             c.setRequestMethod("POST");
             c.setRequestProperty("Content-Type", "application/octet-stream");
@@ -31,12 +31,12 @@ public class Asr {
             byte[] b = new byte[4096]; int n;
             while (in != null && (n = in.read(b)) > 0) bo.write(b, 0, n);
             String body = bo.toString("UTF-8");
-            if (code >= 400) { Log.e(TAG, "server " + code + ": " + body); return new String[]{"", ""}; }
+            if (code >= 400) { Log.e(TAG, "server " + code + ": " + body); return null; }
             JSONObject o = new JSONObject(body);
             return new String[]{o.optString("text", ""), o.optString("free", "")};
         } catch (Throwable t) {
             Log.e(TAG, "recognize", t);
-            return new String[]{"", ""};
+            return null;
         } finally {
             if (c != null) c.disconnect();
         }

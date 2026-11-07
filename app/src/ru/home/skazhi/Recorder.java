@@ -17,11 +17,11 @@ public class Recorder {
     private volatile boolean running;
     private Thread thread;
     private volatile AudioRecord rec;   // held so stop() can unblock a blocking read()
-    private final ByteArrayOutputStream out = new ByteArrayOutputStream(RATE * 2 * 4);
+    private volatile ByteArrayOutputStream out = new ByteArrayOutputStream();
 
     public synchronized void start() {
         if (running) return;
-        out.reset();
+        out = new ByteArrayOutputStream(RATE * 2 * 4);  // fresh buffer: a stuck old loop keeps writing to its own
         running = true;
         thread = new Thread(this::loop, "skazhi-rec");
         thread.start();
@@ -37,6 +37,7 @@ public class Recorder {
     }
 
     private void loop() {
+        ByteArrayOutputStream out = this.out;
         AudioRecord r = null;
         try {
             int min = AudioRecord.getMinBufferSize(RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT);
