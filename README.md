@@ -1,90 +1,157 @@
-<p align="center"><img src="art/icon-256.png" width="128" alt="skazhi"></p>
+<p align="center"><img src="art/icon-256.png" width="128" alt="skazhi logo"></p>
 
-# skazhi
+<h1 align="center">skazhi</h1>
 
-Voice commands for a Google-less (China-firmware) Xiaomi Android TV, using the
-**remote's own microphone** and offline Russian speech recognition on a
-Raspberry Pi. Hold the remote's mic button, say a command ("запусти ютуб"),
-release — the named app opens.
+<p align="center">
+  <b>Offline Russian voice control for an Android TV without Google</b><br>
+  Hold the remote's mic button, say «запусти ютуб» — YouTube opens.
+</p>
 
-No Google services, no cloud, no API keys. Audio never leaves the home network.
+<p align="center">
+  <img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-blue">
+  <img alt="Android TV" src="https://img.shields.io/badge/Android%20TV-9%2B-3DDC84?logo=android&logoColor=white">
+  <img alt="Vosk" src="https://img.shields.io/badge/STT-Vosk%20(offline)-6D3BFF">
+  <img alt="Raspberry Pi" src="https://img.shields.io/badge/server-Raspberry%20Pi-C51A4A?logo=raspberrypi&logoColor=white">
+</p>
+
+China-firmware Xiaomi TVs ship without Google services, so the remote's voice
+button does nothing useful outside China. **skazhi** («скажи», "say") brings it
+back: it uses the **remote's own microphone**, recognizes speech **offline** on a
+Raspberry Pi in your home network, and runs the command on the TV.
+
+No Google, no cloud, no API keys, no root. Audio never leaves your LAN.
+
+## What you can say
+
+| Say | Does |
+|---|---|
+| «запусти / открой / включи **ютуб**» | opens YouTube (any app — configurable) |
+| «включи **музыку**», «запусти **спотифай**» | opens Spotify |
+| «**громче**», «**тише**», «**выключи звук**» | volume up / down / mute |
+| «**пауза**», «**продолжи**», «**дальше**», «**предыдущий**» | media keys for the current player |
+| «**домой**», «**назад**» | Home / Back |
+| «**найди** реквием по мечте» | opens Lampa search with the title |
+| «**выключи телевизор**» | puts the TV to sleep |
+
+All phrases live in [`app/assets/commands.json`](app/assets/commands.json).
 
 ## How it works
 
 ```
-remote mic ──BLE──▶ TV ──PCM/HTTP──▶ Raspberry Pi ──▶ app launches
- (hold button)    (records)       (Vosk STT, grammar)
+ hold mic button        record while held            Vosk on the Pi
+ ┌──────────┐  BLE   ┌───────────────────┐  HTTP   ┌──────────────────┐
+ │  remote  │ ─────▶ │ TV: skazhi        │ ──────▶ │ skazhi-asr       │
+ └──────────┘        │ (accessibility    │  PCM    │ grammar + free   │
+                     │  service)         │ ◀────── │ transcripts      │
+                     └───────────────────┘  JSON   └──────────────────┘
+                       │ match commands.json
+                       ▼
+            launch app · volume · media key · home/back · Lampa search
 ```
 
-- **app/** — a tiny Android accessibility service on the TV. It catches the
-  remote's voice button (a key the firmware delivers but doesn't fully own),
-  records the remote mic via `AUDIO_SOURCE_VOICE_RECOGNITION` while the button
-  is held, POSTs the PCM to the Pi, matches the recognized text against
-  `commands.json`, and launches the mapped package.
-- **server/** — a small HTTP server on the Pi wrapping [Vosk](https://alphacephei.com/vosk/).
-  `POST /recognize` with raw 16 kHz mono PCM16 → `{"text": "..."}`. An optional
-  base64 grammar header restricts recognition to the command phrases, which makes
-  short commands near-perfect even on a noisy mic.
+- **[app/](app)** — a tiny Android accessibility service (no UI, ~300 lines of
+  Java, built without Gradle). It catches the remote's voice button, records the
+  remote mic while the button is held, sends the audio to the Pi and runs the
+  matched action.
+- **[server/](server)** — an ~80-line Python HTTP server wrapping
+  [Vosk](https://alphacephei.com/vosk/). `POST /recognize` with raw 16 kHz mono
+  PCM16 returns two transcripts: one restricted to the command phrases (near
+  perfect on short commands) and one free-form (for «найди ‹title›»).
 
-## Why these choices (the non-obvious bits)
+### The non-obvious bits
 
-- The remote mic reaches apps as `AUDIO_SOURCE_VOICE_RECOGNITION`, **not** the
-  built-in far-field mic (`MIC`, which is nearly silent here). The XiaoAI socket
-  path is SELinux-locked and unused.
-- The remote streams over BLE in **bursts**; raw `AudioRecord` concatenation
-  compresses speech in time and ruins recognition. The recorder pads gaps with
-  silence by wall clock to keep the timeline real.
-- Recognition runs **on the Pi**, never on the TV — on-device Vosk crashed this
-  TV's video pipeline. The TV only records and uploads.
-- Grammar travels in a **base64** header; raw Cyrillic in an HTTP header is
-  mangled to mojibake.
-- The key is **not consumed** (the service returns `false`), so the firmware
-  keeps streaming the mic; the disabled XiaoAI assistant fails harmlessly.
+- The remote mic reaches apps as **`AUDIO_SOURCE_VOICE_RECOGNITION`**, and only
+  while the button is held. The TV's own far-field mic (`MIC`) is nearly silent.
+- The remote streams audio over BLE in **bursts**. Plain `AudioRecord` reads
+  squash speech in time and wreck recognition, so the recorder pads the gaps
+  with silence by wall clock.
+- The key is **not consumed**: the firmware keeps streaming audio only while it
+  thinks its own assistant is listening. The (unavailable) XiaoAI assistant then
+  fails silently.
+- Recognition runs **on the Pi**, not the TV: on-device Vosk broke this TV's
+  video pipeline.
+- The grammar travels in a **base64** header: raw Cyrillic in HTTP headers turns
+  into mojibake.
+- Lampa's `SEARCH` intent filter has no `CATEGORY_DEFAULT`, so the search intent
+  is resolved and started explicitly with a `query` extra.
 
 ## Setup
 
-### Server (Raspberry Pi / any Linux)
+You need: the TV with ADB over network enabled, a Raspberry Pi (or any Linux box)
+on the same LAN, and on your computer Android cmdline-tools (build-tools 34,
+platform 34) plus a JDK.
+
+### 1. Server (Raspberry Pi)
 
 ```bash
 cd server
-sudo ./install.sh                     # downloads the small Russian model
+sudo ./install.sh                         # downloads vosk-model-small-ru-0.22
 # or: sudo ./install.sh /path/to/vosk-model-dir
 ```
-Installs to `/opt/skazhi`, runs as a `skazhi-asr` systemd service on port 2700,
-and opens that port to the LAN if `nft` is present. Health: `curl PI:2700/health`.
 
-### App (TV, over ADB)
+Installs to `/opt/skazhi` and runs as the `skazhi-asr` systemd service on port
+2700 (opened to `192.168.0.0/16` if nftables is used). Re-run it to update.
 
-Needs Android cmdline-tools (build-tools 34 + platform 34) and a JDK.
+```bash
+curl http://<pi-ip>:2700/health           # {"ok": true}
+journalctl -u skazhi-asr -f               # what it heard, live
+```
+
+### 2. App (TV)
 
 ```bash
 cd app
-# edit commands.json: set "server" to http://<pi-ip>:2700/recognize, add commands
-./build.sh                            # -> skazhi.apk  (no Gradle)
-./deploy.sh 192.168.88.57:5555        # install + enable accessibility + grant mic
+# set "server" in assets/commands.json to http://<pi-ip>:2700/recognize
+./build.sh                                # -> skazhi.apk
+./deploy.sh <tv-ip>:5555                  # install, grant mic, enable the service
 ```
 
-## Commands
-
-`app/assets/commands.json` maps spoken phrases to packages:
+## Adding commands
 
 ```json
-{
-  "server": "http://192.168.88.241:2700/recognize",
-  "trigger_scan_code": 63,
-  "commands": [
-    { "phrases": ["запусти ютуб", "ютуб"], "package": "com.google.android.youtube.tv" },
-    { "phrases": ["запусти лампу", "лампа"], "package": "top.rootu.lampa" }
-  ]
-}
+{ "phrases": ["кинопоиск"], "launch": "ru.kinopoisk.tv" }
 ```
 
-Add a command: add an entry, rebuild, redeploy. `trigger_scan_code` is the
-remote's voice-button scancode (63 on this remote; find yours with
-`getevent`/logcat if different).
+A command is a list of phrases plus one action:
 
-## Hardware this was built for
+| Action | Argument |
+|---|---|
+| `launch` | package name; `launch_verbs` («запусти», «открой», «включи») are prepended automatically |
+| `volume` | `up`, `down`, `mute` |
+| `key` | media key, e.g. `KEYCODE_MEDIA_PAUSE` |
+| `global` | `home`, `back`, `lock` |
 
-Xiaomi TV (MediaTek, Android 14, China HyperOS, no GMS) + its BT voice remote,
-and a Raspberry Pi 4 on the same LAN. Other devices will differ in scancodes,
-package names and mic routing.
+The `search` block sets the prefixes («найди», «поищи») and the app that gets
+the rest of the phrase as a search query.
+
+Phrases must use words from the Vosk model's vocabulary: Vosk silently drops
+unknown words. For example, «спотифай» isn't in it, so it's written as «спот и
+фай». `trigger_scan_code` is the voice button's scancode (63 here; find yours
+with `adb shell getevent -l`).
+
+## Tested on
+
+Xiaomi TV (MediaTek, China firmware, no GMS) with its Bluetooth voice remote, and
+a Raspberry Pi 4. Other TVs may differ in the button scancode, package names and
+how the remote mic is routed. Reports and PRs are welcome.
+
+---
+
+## По-русски
+
+**skazhi** — офлайн-голосовое управление телевизором Xiaomi с китайской
+прошивкой (без Google, без Play Market, без XiaoAI) через микрофон родного пульта.
+Зажимаешь кнопку микрофона, говоришь «запусти ютуб», «сделай громче» или «найди
+матрица» — телевизор выполняет. Распознавание речи — Vosk на Raspberry Pi в
+домашней сети, без облака и без root.
+
+Умеет: запуск приложений (YouTube, Lampa, Spotify, любое по имени пакета),
+громкость, пауза и перемотка, «домой» / «назад», поиск фильма в Lampa голосом,
+выключение телевизора. Команды настраиваются в `commands.json`.
+
+Подойдёт, если голосовой поиск на Mi TV / Xiaomi TV с китайской прошивкой не
+работает, а Google Assistant поставить нельзя.
+
+## License
+
+[MIT](LICENSE)
