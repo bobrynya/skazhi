@@ -1,0 +1,27 @@
+# Push a tag like v0.2.0: builds skazhi.apk and attaches it to a GitHub release.
+name: release
+on:
+  push:
+    tags: ["v*"]
+permissions:
+  contents: write
+jobs:
+  apk:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: SDK packages
+        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "build-tools;34.0.0" "platforms;android-34" >/dev/null
+      - name: Build
+        env:
+          ANDROID_SDK: ${{ env.ANDROID_HOME }}
+          KS_PASS: ${{ secrets.KS_PASS }}
+          KS_ALIAS: skazhi
+          KS_B64: ${{ secrets.KEYSTORE_B64 }}
+        run: |
+          echo "$KS_B64" | base64 -d > "$RUNNER_TEMP/release.jks"
+          KEYSTORE="$RUNNER_TEMP/release.jks" app/build.sh
+      - name: Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" app/skazhi.apk --generate-notes

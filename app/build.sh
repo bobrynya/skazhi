@@ -14,8 +14,10 @@ javac --release 11 -cp "$JAR" -d build/classes $(find src -name '*.java')
 cp build/base.apk build/unsigned.apk
 (cd build/dex && zip -q ../unsigned.apk classes.dex)
 "$BT/zipalign" -f -p 4 build/unsigned.apk build/aligned.apk
+# Release builds (CI) pass KEYSTORE/KS_PASS/KS_ALIAS; locally the debug key is used.
 KS="${KEYSTORE:-$HOME/.android/debug.keystore}"
-[ -f "$KS" ] || keytool -genkeypair -keystore "$KS" -storepass android -keypass android \
+[ -n "${KEYSTORE:-}" ] || [ -f "$KS" ] || keytool -genkeypair -keystore "$KS" -storepass android -keypass android \
     -alias androiddebugkey -dname "CN=Android Debug" -keyalg RSA -validity 10000 >/dev/null 2>&1
-"$BT/apksigner" sign --ks "$KS" --ks-pass pass:android --out skazhi.apk build/aligned.apk
+KS_PASS="${KS_PASS:-android}" "$BT/apksigner" sign --ks "$KS" --ks-pass env:KS_PASS \
+    --ks-key-alias "${KS_ALIAS:-androiddebugkey}" --out skazhi.apk build/aligned.apk
 echo "built $(pwd)/skazhi.apk"
