@@ -3,7 +3,7 @@
 # Needs Android cmdline-tools (build-tools 34, platform 34) + a JDK.
 set -euo pipefail
 cd "$(dirname "$0")"
-SDK="${ANDROID_SDK:-/opt/homebrew/share/android-commandlinetools}"
+SDK="${ANDROID_SDK:-${ANDROID_HOME:-/opt/homebrew/share/android-commandlinetools}}"
 BT="$SDK/build-tools/34.0.0"; JAR="$SDK/platforms/android-34/android.jar"
 rm -rf build && mkdir -p build/classes build/dex
 "$BT/aapt2" compile --dir res -o build/res.zip >/dev/null
